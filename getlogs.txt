@@ -1,0 +1,117 @@
+#!/bin/bash
+
+echo
+echo "-- Klipper logs uploader --"
+echo
+
+srv=${SERVER:-https://coderus.openrepos.net}
+loc=${LOCATION:-klipper_logs}
+
+data=${1:-printer_data}
+if [ -d "${data}" ]; then
+  logs="${data}/logs"
+else
+  logs="${HOME}/${data}/logs"
+fi
+dmesg="${logs}/dmesg.txt"
+
+klippy_log="${logs}/klippy.log"
+if [ -f "${klippy_log}" ]; then
+  echo "Selected ${klippy_log}"
+else
+  echo "Not found ${klippy_log}"
+  exit
+fi
+
+moonraker_log="${logs}/moonraker.log"
+if [ -f "${moonraker_log}" ]; then
+  echo "Selected ${moonraker_log}"
+else
+  echo "Not found ${moonraker_log}"
+  exit
+fi
+
+sudo dmesg -T > ${dmesg}
+if [ -f "${dmesg}" ]; then
+  echo "Selected ${dmesg}"
+else
+  echo "Not found ${dmesg}"
+  exit
+fi
+
+debug="${logs}/debug.txt"
+rm -rf $debug
+
+cmds=(
+"lsb_release -a"
+"uname -a"
+"find /dev/serial"
+"find /dev/v4l"
+"free -h"
+"df -h"
+"lsusb"
+"systemctl status KlipperScreen"
+"systemctl status klipper-mcu"
+"ip --details --statistics link show dev can0"
+)
+
+for ((i = 0; i < ${#cmds[@]}; i++))
+do
+  echo >> $debug
+  echo "${cmds[$i]}" >> $debug
+  ${cmds[$i]} >> $debug 2>&1 
+done
+
+
+files=(
+"/boot/config.txt"
+"/boot/cmdline.txt"
+"/boot/armbianEnv.txt"
+"/boot/orangepiEnv.txt"
+"/boot/BoardEnv.txt"
+"/boot/env.txt"
+)
+
+
+for ((i = 0; i < ${#files[@]}; i++))
+do
+  echo >> $debug
+  echo "cat ${files[$i]}" >> $debug
+  cat "${files[$i]}" >> $debug 2>&1
+done
+
+tarfile="logs.tar.xz"
+
+crownest_log=""
+if [ -f "${logs}/crownest.log" ]; then
+  crownest_log="crownest.log"
+fi
+
+telegram_log=""
+if [ -f "${logs}/telegram.log" ]; then
+  telegram_log="telegram.log"
+fi
+
+echo
+echo "Please wait, files are being compressed..."
+XZ_OPT=-9 tar cvJf ${tarfile} -C ${logs} klippy.log moonraker.log dmesg.txt debug.txt ${crownest_log} ${telegram_log}
+
+form="-F tarfile=@${tarfile}"
+
+if [ "x$2" = "x" ]; then
+  echo
+  echo "Please wait, files are uploading..."
+  headers="logs_headers.txt"
+  curl ${srv}/${loc} ${form} --progress-bar -o /dev/null -D "${headers}" | cat
+  location=$(cat "${headers}" | grep Location | cut -d' ' -f2)
+  rm ""${headers}""
+
+  echo
+  echo "Logs uploaded:"
+  echo "${srv}${location}"
+elif [ "x$2" = "xv" ]; then
+  curl -vi $(echo ${form}) ${srv}/${loc}
+elif [ "x$2" = "xd" ]; then
+  cat $debug
+fi
+
