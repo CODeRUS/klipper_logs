@@ -45,6 +45,7 @@ rm -rf $debug
 cmds=(
 "lsb_release -a"
 "uname -a"
+"id"
 "find /dev/serial"
 "find /dev/v4l"
 "free -h"
@@ -65,6 +66,7 @@ done
 
 files=(
 "/boot/config.txt"
+"/boot/firmware/config.txt"
 "/boot/cmdline.txt"
 "/boot/armbianEnv.txt"
 "/boot/orangepiEnv.txt"
